@@ -48,3 +48,4 @@ if __name__ == "__main__":
 
     # Print final statistics after reading all lines
     print_statistics(status_counts, total_size)
+    
