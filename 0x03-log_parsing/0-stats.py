@@ -1,44 +1,50 @@
 #!/usr/bin/python3
-
+""" Log parsing module """
 import sys
-import re
-from collections import defaultdict
+import signal
 
-# Regular expression to match the input format
-log_pattern = re.compile(r'(?P<ip>\d+\.\d+\.\d+\.\d+) - \[(?P<date>.*?)\] "GET /projects/260 HTTP/1.1" (?P<status>\d{3}) (?P<size>\d+)')
 
-# Initialize metrics
-total_file_size = 0
-status_code_counts = defaultdict(int)
-lines_processed = 0
+def print_statistics(status_counts, total_size):
+    """Print the collected statistics."""
+    print("File size: {:d}".format(total_size))
+    for code in sorted(status_counts.keys()):
+        if status_counts[code] > 0:
+            print("{:d}: {}".format(code, status_counts[code]))
 
-def print_stats():
-    """Print the statistics."""
-    print(f"Total file size: File size: {total_file_size}")
-    for status_code in sorted(status_code_counts):
-        print(f"{status_code}: {status_code_counts[status_code]}")
 
-try:
-    for line in sys.stdin:
-        # Match the line with the regex pattern
-        match = log_pattern.match(line)
-        if match:
-            lines_processed += 1
-            status_code = int(match.group('status'))
-            file_size = int(match.group('size'))
+def handle_sigint(signum, frame):
+    """Handle the SIGINT signal (Ctrl + C) and print statistics."""
+    print_statistics(status_counts, total_size)
+    sys.exit(0)
 
-            # Update metrics
-            total_file_size += file_size
-            status_code_counts[status_code] += 1
 
-        # Print statistics after every 10 lines
-        if lines_processed % 10 == 0:
-            print_stats()
+# Register the SIGINT signal handler
+signal.signal(signal.SIGINT, handle_sigint)
 
-except KeyboardInterrupt:
-    # Handle keyboard interruption (CTRL + C)
-    print_stats()
-    sys.exit()
+if __name__ == "__main__":
+    total_size = 0
+    line_count = 0
+    status_counts = {200: 0, 301: 0, 400: 0, 401: 0,
+                     403: 0, 404: 0, 405: 0, 500: 0}
+    try:
+        for line in sys.stdin:
+            data = line.strip().split()
+            try:
+                total_size += int(data[-1])
+                status_code = int(data[-2])
+                if status_code in status_counts:
+                    status_counts[status_code] += 1
+                    line_count += 1
+            except BaseException:
+                pass
+            if line_count % 10 == 0:
+                print_statistics(status_counts, total_size)
+                # print()  # Print a blank line for readability
 
-# Print final statistics if the input ends naturally
-print_stats()
+    except KeyboardInterrupt:
+        print("\nKeyboard interrupt received while reading from stdin.")
+        print_statistics(status_counts, total_size)
+        sys.exit(0)
+
+    # Print final statistics after reading all lines
+    print_statistics(status_counts, total_size)
